@@ -334,6 +334,7 @@ library
                         XMonad.Util.Replace
                         XMonad.Util.Run
                         XMonad.Util.Scratchpad
+                        XMonad.Util.ScreenFocusedWindow
                         XMonad.Util.SpawnNamedPipe
                         XMonad.Util.SessionStart
                         XMonad.Util.SpawnOnce
