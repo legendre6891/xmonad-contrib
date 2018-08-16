@@ -25,6 +25,7 @@ module XMonad.Hooks.DynamicBars (
   , dynStatusBarEventHook'
   , multiPP
   , multiPPFormat
+  , getScreens
   ) where
 
 import Prelude

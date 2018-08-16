@@ -325,8 +325,8 @@ pprWindowSet sort' urgents pp s = sepBy (ppWsSep pp) . map fmt . sort' $
          -- ^ monitor is the workspaceId (it is a Maybe) of the 
          fmt w = printer pp (S.tag w)
           where printer | any (\x -> maybe False (== S.tag w) (S.findTag x s)) urgents  = ppUrgent
+                        | Just (S.tag w) == screenWorkspace                             = ppScreen
                         | S.tag w == this                                               = ppCurrent
-                        | Just (S.tag w) == screenWorkspace                                      = ppScreen
                         | S.tag w `elem` visibles && isJust (S.stack w)                 = ppVisible
                         | S.tag w `elem` visibles                                       = liftM2 fromMaybe ppVisible ppVisibleNoWindows
                         | isJust (S.stack w)                                            = ppHidden
