@@ -71,6 +71,7 @@ import Foreign.C (CChar)
 
 import XMonad
 
+import XMonad.Util.ScreenFocusedWindow (currentWindow)
 import XMonad.Util.WorkspaceCompare
 import XMonad.Util.NamedWindows
 import XMonad.Util.Run
@@ -298,6 +299,9 @@ dynamicLogString pp = do
     -- window title
     wt <- maybe (return "") (fmap show . getName) . S.peek $ winset
 
+    -- screen title
+    st <- maybe (return "") (fmap show . getName) (currentWindow winset (ppScreenId pp))
+
     -- run extra loggers, ignoring any that generate errors.
     extras <- mapM (flip catchX (return Nothing)) $ ppExtras pp
 
@@ -305,6 +309,7 @@ dynamicLogString pp = do
                         [ ws
                         , ppLayout pp ld
                         , ppTitle  pp $ ppTitleSanitize pp wt
+                        , ppScreenTitle  pp $ ppTitleSanitize pp st
                         ]
                         ++ catMaybes extras
 
@@ -314,12 +319,14 @@ dynamicLogString pp = do
 pprWindowSet :: WorkspaceSort -> [Window] -> PP -> WindowSet -> String
 pprWindowSet sort' urgents pp s = sepBy (ppWsSep pp) . map fmt . sort' $
             map S.workspace (S.current s : S.visible s) ++ S.hidden s
-   where this     = S.currentTag s
-         visibles = map (S.tag . S.workspace) (S.visible s)
-
+   where this              = S.currentTag s
+         visibles          = map (S.tag . S.workspace) (S.visible s)
+         screenWorkspace   = S.lookupWorkspace (ppScreenId pp) s
+         -- ^ monitor is the workspaceId (it is a Maybe) of the 
          fmt w = printer pp (S.tag w)
           where printer | any (\x -> maybe False (== S.tag w) (S.findTag x s)) urgents  = ppUrgent
                         | S.tag w == this                                               = ppCurrent
+                        | Just (S.tag w) == screenWorkspace                                      = ppScreen
                         | S.tag w `elem` visibles && isJust (S.stack w)                 = ppVisible
                         | S.tag w `elem` visibles                                       = liftM2 fromMaybe ppVisible ppVisibleNoWindows
                         | isJust (S.stack w)                                            = ppHidden
@@ -475,9 +482,14 @@ xmobarStripTags tags = strip [] where
 
 -- | The 'PP' type allows the user to customize the formatting of
 --   status information.
-data PP = PP { ppCurrent :: WorkspaceId -> String
+data PP = PP { ppScreenId :: ScreenId
+               -- ^ which screen should I format for
+             , ppCurrent :: WorkspaceId -> String
                -- ^ how to print the tag of the currently focused
                -- workspace
+             , ppScreen :: WorkspaceId -> String
+               -- ^ how to print the tag of workspace on the
+               -- physical screen (xinerama only)
              , ppVisible :: WorkspaceId -> String
                -- ^ how to print tags of visible but not focused
                -- workspaces (xinerama only)
@@ -497,15 +509,18 @@ data PP = PP { ppCurrent :: WorkspaceId -> String
                -- ^ separator to use between workspace tags
              , ppTitle :: String -> String
                -- ^ window title format
+             , ppScreenTitle :: String -> String
+               -- ^ window title format for the ppScreenId
              , ppTitleSanitize :: String -> String
               -- ^  escape / sanitizes input to 'ppTitle'
              , ppLayout :: String -> String
                -- ^ layout name format
              , ppOrder :: [String] -> [String]
                -- ^ how to order the different log sections. By
-               --   default, this function receives a list with three
+               --   default, this function receives a list with four
                --   formatted strings, representing the workspaces,
-               --   the layout, and the current window title,
+               --   the layout, the current window title,
+               --   and the window title on the ppScreenId,
                --   respectively. If you have specified any extra
                --   loggers in 'ppExtras', their output will also be
                --   appended to the list.  To get them in the reverse
@@ -536,7 +551,9 @@ defaultPP :: PP
 defaultPP = def
 
 instance Default PP where
-    def   = PP { ppCurrent         = wrap "[" "]"
+    def   = PP { ppScreenId        = 0
+               , ppCurrent         = wrap "[" "]"
+               , ppScreen          = wrap "(" ")"
                , ppVisible         = wrap "<" ">"
                , ppHidden          = id
                , ppHiddenNoWindows = const ""
@@ -545,9 +562,10 @@ instance Default PP where
                , ppSep             = " : "
                , ppWsSep           = " "
                , ppTitle           = shorten 80
+               , ppScreenTitle     = shorten 80
                , ppTitleSanitize   = xmobarStrip . dzenEscape
                , ppLayout          = id
-               , ppOrder           = id
+               , ppOrder           = \x -> map (\i -> x !! i) [0, 1, 3]
                , ppOutput          = putStrLn
                , ppSort            = getSortByIndex
                , ppExtras          = []
